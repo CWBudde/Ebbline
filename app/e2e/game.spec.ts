@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { deploy } from "./helpers.ts";
 
 /** Reads from the running game through the handle the app puts on `window`. */
 async function game<T>(page: Page, read: string): Promise<T> {
@@ -12,6 +13,7 @@ async function startFirstMission(page: Page): Promise<void> {
   await expect(page.locator("body[data-ready=true]")).toBeAttached();
   await page.getByRole("button", { name: "Campaign" }).click();
   await page.getByRole("button", { name: /First Light/ }).click();
+  await deploy(page);
   await expect(page.getByTestId("goal")).toHaveText("Vents capped 0 / 1");
 }
 

@@ -109,7 +109,7 @@ export const CAMPAIGN: readonly LevelDef[] = [
       "grader",
     ],
     objective: { kind: "cap" },
-    hints: ["Select the Grader tool, pick a height and paint tiles; a Grader in range does the work."],
+    hints: ["Select Mark, pick a height and paint tiles; a Grader in range does the work."],
   },
   {
     id: "c8",
@@ -134,6 +134,33 @@ export const CAMPAIGN: readonly LevelDef[] = [
     hints: [],
   },
 ];
+
+/** What a campaign mission shows the player for the first time. */
+export interface Introduced {
+  /** Structures the mission allows that no earlier mission did, in the order the mission lists them. */
+  readonly structures: readonly Kind[];
+  /** The first mission with a spitter. */
+  readonly spitters: boolean;
+  /** The first mission that is won by holding out instead of capping. */
+  readonly survive: boolean;
+}
+
+/**
+ * What is new in a campaign mission, worked out from the missions before it. A level that is not
+ * part of the campaign introduces nothing.
+ */
+export function introduced(levelId: string): Introduced {
+  const index = CAMPAIGN.findIndex((l) => l.id === levelId);
+  const level = CAMPAIGN[index];
+  if (!level) return { structures: [], spitters: false, survive: false };
+  const earlier = CAMPAIGN.slice(0, index);
+  const known = new Set(earlier.flatMap((l) => l.allowed));
+  return {
+    structures: level.allowed.filter((kind, i, all) => !known.has(kind) && all.indexOf(kind) === i),
+    spitters: level.spitters.count > 0 && earlier.every((l) => l.spitters.count === 0),
+    survive: level.objective.kind === "survive" && earlier.every((l) => l.objective.kind !== "survive"),
+  };
+}
 
 export type MapSize = "small" | "medium" | "large";
 export type Difficulty = "easy" | "normal" | "hard";

@@ -1,6 +1,6 @@
 // Pointer, touch, wheel and keyboard input for the map.
 
-import { BUILDABLE, structureAt, type Game } from "@ebbline/engine";
+import { BUILDABLE, placeError, structureAt, type Game, type PlaceError } from "@ebbline/engine";
 import { TILE, clamp, tileAt, zoomAt, type View } from "./camera.ts";
 import { dragPlaces } from "./place.ts";
 import { SPEEDS, type Runtime } from "./runtime.ts";
@@ -12,8 +12,8 @@ export interface InputHost {
   menu(): void;
   /** Whether a menu covers the map; the map then takes no input. */
   overlayOpen(): boolean;
-  /** Feedback for a refused placement. */
-  deny(): void;
+  /** Feedback for a refused placement, with the reason if the engine gave one. */
+  deny(why?: PlaceError): void;
   edgeScroll(): boolean;
 }
 
@@ -117,7 +117,7 @@ export class Input {
     if (!dragPlaces(tool.structure, press.last, tile.x, tile.y)) return;
     const events = rt.act({ kind: "place", structure: tool.structure, x: tile.x, y: tile.y });
     if (events.some((ev) => ev.kind === "placed")) press.last = tile;
-    else if (first) this.host.deny();
+    else if (first) this.host.deny(placeError(rt.game, tool.structure, tile.x, tile.y) ?? undefined);
   }
 
   private move(e: PointerEvent): void {
@@ -205,7 +205,7 @@ export class Input {
     const kind = slot >= 0 ? BUILDABLE[slot] : undefined;
     if (kind) {
       if (rt.game.level.allowed.includes(kind)) rt.tool.value = { kind: "build", structure: kind };
-      else this.host.deny();
+      else this.host.deny("locked");
       return;
     }
     switch (e.code) {

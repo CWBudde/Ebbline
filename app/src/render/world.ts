@@ -1,6 +1,6 @@
-// Draws the map: baked ground, the silt texture, structure sprites and a per-frame overlay.
+// Draws the map: baked ground, the silt texture, structure and feature sprites and a per-frame overlay.
 
-import { Container, Graphics, Sprite, Texture, type Application } from "pixi.js";
+import { CanvasSource, Container, Graphics, Sprite, Texture, type Application } from "pixi.js";
 import {
   BUILDABLE,
   KINDS,
@@ -10,54 +10,103 @@ import {
   placeError,
   ventDry,
   type Game,
-  type Kind,
   type Structure,
 } from "@ebbline/engine";
 import { TILE, type View } from "../camera.ts";
 import type { Runtime } from "../runtime.ts";
 import { ACCENT, COLORS, drawStructure } from "./art.ts";
-import { BAKE, bakeTerrain, paintSilt, rebakeTile } from "./terrain.ts";
+import { spriteUrls, type SpriteKind } from "./assets.ts";
+import { coverageKey, gridCoverage } from "./coverage.ts";
+import { loadArt, type Art, type SpriteArt } from "./sprites.ts";
+import { BAKE, SILT_SUB, bakeTerrain, paintSilt, rebakeTile, type Materials } from "./terrain.ts";
 
 const centre = (tile: number): number => (tile + 0.5) * TILE;
 
+/** Share of its footprint a sprite fills; the atlas stores every piece at the same size. */
+const FIT: Partial<Record<SpriteKind, number>> = {
+  pylon: 0.82,
+  vent: 1.5,
+  spitter: 1.7,
+  lode: 1.05,
+};
+
+/** Milliseconds between silt repaints while it shimmers. */
+const SHIMMER_MS = 80;
+
 export class Renderer {
   readonly world = new Container();
+  /** Settles once the generated art has loaded, or has failed to. */
+  readonly ready: Promise<void>;
   private readonly ground = new Sprite();
   private readonly silt = new Sprite();
+  private readonly lodes = new Container();
   private readonly features = new Graphics();
+  private readonly vents = new Container();
+  /** The tiles the built grid reaches, shown while building and for a selected connector. */
+  private readonly coverage = new Graphics();
+  private coverageKey = "";
   private readonly under = new Graphics();
   private readonly sprites = new Container();
   private readonly ghost = new Sprite();
   private readonly over = new Graphics();
-  private readonly textures = new Map<Kind, Texture>();
+  private readonly textures = new Map<SpriteKind, SpriteArt>();
   private readonly byId = new Map<number, Sprite>();
+  private readonly ventSprites: Sprite[] = [];
+  private readonly spitterSprites = new Map<number, Sprite>();
+  private materials: Materials = {};
   private groundCanvas: HTMLCanvasElement | undefined;
   private siltCanvas: HTMLCanvasElement | undefined;
   private siltImage: ImageData | undefined;
   private game: Game | undefined;
   private paintedTick = -1;
+  private paintedAt = 0;
 
   constructor(app: Application) {
+    // The code-drawn pieces come first and stay for whatever the art does not cover.
     for (const kind of ["lander", ...BUILDABLE] as const) {
       const drawing = drawStructure(kind, TILE);
-      this.textures.set(
-        kind,
-        app.renderer.generateTexture({ target: drawing, resolution: 1, antialias: true }),
-      );
+      this.textures.set(kind, {
+        texture: app.renderer.generateTexture({ target: drawing, resolution: 1, antialias: true }),
+        perTile: TILE * 2,
+      });
       drawing.destroy();
     }
     this.ghost.anchor.set(0.5);
     this.ghost.alpha = 0.55;
     this.world.addChild(
       this.ground,
+      this.lodes,
       this.features,
       this.silt,
+      this.vents,
+      this.coverage,
       this.under,
       this.sprites,
       this.ghost,
       this.over,
     );
     app.stage.addChild(this.world);
+    this.ready = loadArt()
+      .then((art) => {
+        this.adopt(art);
+      })
+      .catch(() => undefined);
+  }
+
+  /** Takes over the loaded art and redraws the running game with it. */
+  private adopt(art: Art): void {
+    for (const [kind, sprite] of art.sprites) this.textures.set(kind, sprite);
+    this.materials = art.materials;
+    spriteUrls.value = { ...spriteUrls.value, ...art.urls };
+    if (this.game) this.load(this.game);
+  }
+
+  private place(sprite: Sprite, kind: SpriteKind, x: number, y: number): void {
+    const art = this.textures.get(kind);
+    sprite.texture = art?.texture ?? Texture.EMPTY;
+    sprite.anchor.set(0.5);
+    sprite.scale.set(((art ? TILE / art.perTile : 1) * (FIT[kind] ?? 1)));
+    sprite.position.set(x, y);
   }
 
   /** Switches to a new game, or to none. */
@@ -66,31 +115,60 @@ export class Renderer {
     this.world.visible = game !== undefined;
     for (const sprite of this.byId.values()) sprite.destroy();
     this.byId.clear();
+    for (const sprite of this.lodes.removeChildren()) sprite.destroy();
+    for (const sprite of this.vents.removeChildren()) sprite.destroy();
+    this.ventSprites.length = 0;
+    this.spitterSprites.clear();
     this.paintedTick = -1;
+    this.coverage.clear();
+    this.coverageKey = "";
     if (!game) return;
-    this.groundCanvas = bakeTerrain(game);
+    this.groundCanvas = bakeTerrain(game, this.materials);
     this.ground.texture.destroy(true);
-    this.ground.texture = Texture.from(this.groundCanvas);
+    // The ground is shown smaller than it is baked when zoomed out: mipmaps keep its texture calm.
+    this.ground.texture = new Texture({
+      source: new CanvasSource({
+        resource: this.groundCanvas,
+        autoGenerateMipmaps: true,
+        scaleMode: "linear",
+        mipmapFilter: "linear",
+      }),
+    });
     this.ground.scale.set(TILE / BAKE);
     this.siltCanvas = document.createElement("canvas");
-    this.siltCanvas.width = game.w;
-    this.siltCanvas.height = game.h;
-    this.siltImage = new ImageData(game.w, game.h);
+    this.siltCanvas.width = game.w * SILT_SUB;
+    this.siltCanvas.height = game.h * SILT_SUB;
+    this.siltImage = new ImageData(game.w * SILT_SUB, game.h * SILT_SUB);
     this.silt.texture.destroy(true);
     this.silt.texture = Texture.from(this.siltCanvas);
     this.silt.texture.source.scaleMode = "linear";
-    this.silt.scale.set(TILE);
+    this.silt.scale.set(TILE / SILT_SUB);
     this.features.clear();
+    const lodeArt = this.textures.has("lode");
     for (let i = 0; i < game.lode.length; i++) {
       if (game.lode[i] !== 1) continue;
       const x = centre(i % game.w);
       const y = centre(Math.floor(i / game.w));
+      if (lodeArt) {
+        const sprite = new Sprite();
+        this.place(sprite, "lode", x, y);
+        this.lodes.addChild(sprite);
+        continue;
+      }
       const r = TILE * 0.42;
       this.features
         .poly([x, y - r, x + r, y, x, y + r, x - r, y])
         .fill({ color: COLORS.economy, alpha: 0.28 })
         .stroke({ width: 2, color: COLORS.economy, alpha: 0.9 });
       this.features.circle(x, y, TILE * 0.1).fill(COLORS.economy);
+    }
+    if (this.textures.has("vent")) {
+      for (const vent of game.vents) {
+        const sprite = new Sprite();
+        this.place(sprite, "vent", centre(vent.x), centre(vent.y));
+        this.vents.addChild(sprite);
+        this.ventSprites.push(sprite);
+      }
     }
   }
 
@@ -100,10 +178,8 @@ export class Renderer {
       alive.add(s.id);
       let sprite = this.byId.get(s.id);
       if (!sprite) {
-        sprite = new Sprite(this.textures.get(s.kind) ?? Texture.EMPTY);
-        sprite.anchor.set(0.5);
-        sprite.scale.set(0.5);
-        sprite.position.set(centre(s.x), centre(s.y));
+        sprite = new Sprite();
+        this.place(sprite, s.kind, centre(s.x), centre(s.y));
         this.sprites.addChild(sprite);
         this.byId.set(s.id, sprite);
       }
@@ -115,9 +191,29 @@ export class Renderer {
       sprite.destroy();
       this.byId.delete(id);
     }
+    game.vents.forEach((vent, n) => {
+      const sprite = this.ventSprites[n];
+      if (sprite) sprite.tint = vent.capped ? 0x56666c : 0xffffff;
+    });
+    if (!this.textures.has("spitter")) return;
+    const seen = new Set<number>();
+    for (const spitter of game.spitters) {
+      const key = spitter.y * game.w + spitter.x;
+      seen.add(key);
+      if (this.spitterSprites.has(key)) continue;
+      const sprite = new Sprite();
+      this.place(sprite, "spitter", centre(spitter.x), centre(spitter.y));
+      this.vents.addChild(sprite);
+      this.spitterSprites.set(key, sprite);
+    }
+    for (const [key, sprite] of this.spitterSprites) {
+      if (seen.has(key)) continue;
+      sprite.destroy();
+      this.spitterSprites.delete(key);
+    }
   }
 
-  frame(rt: Runtime, view: View, now: number, calm: boolean): void {
+  frame(rt: Runtime, view: View, now: number, calm: boolean, held: boolean): void {
     const game = this.game;
     if (!game || game !== rt.game) return;
     this.world.scale.set(view.zoom);
@@ -129,9 +225,14 @@ export class Renderer {
       rt.regraded = [];
       this.ground.texture.source.update();
     }
-    if (this.paintedTick !== game.tick && this.siltCanvas && this.siltImage) {
+    // The silt is repainted when it has flowed and, unless motion is reduced, a few times a second
+    // in between so that its surface shimmers.
+    const flowed = this.paintedTick !== game.tick;
+    const due = !calm && !held && !rt.paused.value && now - this.paintedAt >= SHIMMER_MS;
+    if ((flowed || due) && this.siltCanvas && this.siltImage) {
       this.paintedTick = game.tick;
-      paintSilt(this.siltImage, game.silt);
+      this.paintedAt = now;
+      paintSilt(this.siltImage, game.silt, game.w, game.h, calm ? 0 : now / 700);
       this.siltCanvas.getContext("2d")?.putImageData(this.siltImage, 0, 0);
       this.silt.texture.source.update();
     }
@@ -172,16 +273,27 @@ export class Renderer {
         .fill({ color: raise ? COLORS.utility : COLORS.grid, alpha: 0.22 })
         .stroke({ width: 1.5, color: raise ? COLORS.utility : COLORS.grid, alpha: 0.9 });
     }
+    const ventArt = this.ventSprites.length > 0;
     for (const vent of game.vents) {
       if (vent.capped) continue;
       const x = centre(vent.x);
       const y = centre(vent.y);
-      under.circle(x, y, TILE * (0.55 + 0.25 * pulse)).stroke({
-        width: 3,
-        color: ventDry(game, vent) ? 0xffffff : COLORS.silt,
-        alpha: 0.9,
-      });
-      under.circle(x, y, TILE * 0.25).fill(COLORS.silt);
+      const dry = ventDry(game, vent);
+      if (ventArt) {
+        // The sprite is the vent; the ring only shows its beat and whether it can take a cap.
+        under.circle(x, y, TILE * (0.8 + 0.22 * pulse)).stroke({
+          width: 2,
+          color: dry ? 0xffffff : COLORS.silt,
+          alpha: dry ? 0.9 : 0.75 - 0.45 * pulse,
+        });
+      } else {
+        under.circle(x, y, TILE * (0.55 + 0.25 * pulse)).stroke({
+          width: 3,
+          color: dry ? 0xffffff : COLORS.silt,
+          alpha: 0.9,
+        });
+        under.circle(x, y, TILE * 0.25).fill(COLORS.silt);
+      }
       if (vent.pressure > 0) {
         under.circle(x, y, TILE * (1 + Math.min(2, vent.pressure / 20))).stroke({
           width: 2,
@@ -190,17 +302,19 @@ export class Renderer {
         });
       }
     }
-    for (const spitter of game.spitters) {
-      const x = centre(spitter.x);
-      const y = centre(spitter.y);
-      const points: number[] = [];
-      for (let n = 0; n < 10; n++) {
-        const a = (n / 10) * Math.PI * 2;
-        const r = TILE * (n % 2 === 0 ? 0.75 : 0.35);
-        points.push(x + Math.cos(a) * r, y + Math.sin(a) * r);
+    if (!this.textures.has("spitter")) {
+      for (const spitter of game.spitters) {
+        const x = centre(spitter.x);
+        const y = centre(spitter.y);
+        const points: number[] = [];
+        for (let n = 0; n < 10; n++) {
+          const a = (n / 10) * Math.PI * 2;
+          const r = TILE * (n % 2 === 0 ? 0.75 : 0.35);
+          points.push(x + Math.cos(a) * r, y + Math.sin(a) * r);
+        }
+        under.poly(points).fill(0x2a0f24).stroke({ width: 2, color: COLORS.silt });
+        under.circle(x, y, TILE * 0.18).fill(COLORS.silt);
       }
-      under.poly(points).fill(0x2a0f24).stroke({ width: 2, color: COLORS.silt });
-      under.circle(x, y, TILE * 0.18).fill(COLORS.silt);
     }
 
     // Above the structures: status, packets, projectiles, effects and the tool preview.
@@ -210,6 +324,22 @@ export class Renderer {
       const x = centre(s.x);
       const y = centre(s.y);
       const half = (def.size * TILE) / 2;
+      if (s.built && s.active && s.target >= 0 && def.range > 0 && s.kind !== "baffle" && s.kind !== "pump") {
+        // The sprites have no front; a pip on the rim shows where the structure is working.
+        const tx = centre(s.target % game.w) - x;
+        const ty = centre(Math.floor(s.target / game.w)) - y;
+        const far = Math.hypot(tx, ty);
+        if (far > 0) {
+          const ux = tx / far;
+          const uy = ty / far;
+          over
+            .moveTo(x + ux * half * 0.5, y + uy * half * 0.5)
+            .lineTo(x + ux * half * 0.95, y + uy * half * 0.95)
+            .stroke({ width: 2.5, color: 0x0a1216, alpha: 0.9 });
+          over.circle(x + ux * half * 0.95, y + uy * half * 0.95, 2.6).fill(0xffffff);
+          over.circle(x + ux * half * 0.95, y + uy * half * 0.95, 1.6).fill(ACCENT[s.kind]);
+        }
+      }
       const bar = (row: number, share: number, color: number): void => {
         const top = y + half - 5 - row * 4;
         over.rect(x - half + 2, top, (half * 2 - 4), 3).fill({ color: 0x000000, alpha: 0.6 });
@@ -276,6 +406,9 @@ export class Renderer {
 
     const tool = rt.tool.value;
     const hover = rt.hover;
+    this.coverage.visible =
+      tool.kind === "build" || (tool.kind === "none" && selected !== undefined && KINDS[selected.kind].connector);
+    if (this.coverage.visible) this.drawCoverage(game);
     this.ghost.visible = false;
     if (hover && tool.kind === "build") {
       const def = KINDS[tool.structure];
@@ -292,9 +425,7 @@ export class Renderer {
       }
       const ok = error === null && linked;
       this.ghost.visible = true;
-      this.ghost.texture = this.textures.get(tool.structure) ?? Texture.EMPTY;
-      this.ghost.scale.set(0.5);
-      this.ghost.position.set(x, y);
+      this.place(this.ghost, tool.structure, x, y);
       this.ghost.tint = error === null ? 0xffffff : COLORS.bad;
       over.rect(hover.x * TILE, hover.y * TILE, TILE, TILE).stroke({
         width: 2,
@@ -305,6 +436,41 @@ export class Renderer {
     } else if (hover && tool.kind === "grade") {
       over.rect(hover.x * TILE, hover.y * TILE, TILE, TILE).stroke({ width: 2, color: COLORS.utility });
     }
+  }
+
+  /** Tints the tiles within reach of the grid and outlines their edge; redrawn only when the grid changes. */
+  private drawCoverage(game: Game): void {
+    const key = coverageKey(game);
+    if (key === this.coverageKey) return;
+    this.coverageKey = key;
+    const covered = gridCoverage(game);
+    const g = this.coverage.clear();
+    const at = (x: number, y: number): boolean =>
+      x >= 0 && y >= 0 && x < game.w && y < game.h && covered[y * game.w + x] === 1;
+    // The area, as one run of tiles per row.
+    for (let y = 0; y < game.h; y++) {
+      for (let x = 0; x < game.w; x++) {
+        if (!at(x, y)) continue;
+        let end = x;
+        while (at(end + 1, y)) end++;
+        g.rect(x * TILE, y * TILE, (end - x + 1) * TILE, TILE);
+        x = end;
+      }
+    }
+    g.fill({ color: COLORS.grid, alpha: 0.08 });
+    // The edge: every side of a covered tile that faces an uncovered one.
+    for (let y = 0; y < game.h; y++) {
+      for (let x = 0; x < game.w; x++) {
+        if (!at(x, y)) continue;
+        const l = x * TILE;
+        const t = y * TILE;
+        if (!at(x, y - 1)) g.moveTo(l, t).lineTo(l + TILE, t);
+        if (!at(x, y + 1)) g.moveTo(l, t + TILE).lineTo(l + TILE, t + TILE);
+        if (!at(x - 1, y)) g.moveTo(l, t).lineTo(l, t + TILE);
+        if (!at(x + 1, y)) g.moveTo(l + TILE, t).lineTo(l + TILE, t + TILE);
+      }
+    }
+    g.stroke({ width: 1, color: COLORS.grid, alpha: 0.2 });
   }
 
   private range(g: Graphics, x: number, y: number, range: number, min: number, color: number): void {

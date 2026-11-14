@@ -11,6 +11,8 @@ export default defineConfig({
   use: {
     baseURL: `http://localhost:${port}/ebbline/`,
     trace: "retain-on-failure",
+    // The game follows the browser language; specs that read English text rely on this.
+    locale: "en-US",
   },
   webServer: {
     command: "node e2e/server.ts",

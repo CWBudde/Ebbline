@@ -1,7 +1,11 @@
 // Settings, campaign progress and saves in localStorage. Every access may fail (private windows,
 // blocked site data), so the game must work with nothing stored.
 
+import { isLangSetting, type LangSetting } from "./i18n/index.ts";
+
 export interface Settings {
+  /** Interface language; `auto` follows the browser. */
+  language: LangSetting;
   volume: number;
   music: boolean;
   edgeScroll: boolean;
@@ -9,6 +13,7 @@ export interface Settings {
 }
 
 export const DEFAULT_SETTINGS: Settings = {
+  language: "auto",
   volume: 0.6,
   music: true,
   edgeScroll: false,
@@ -16,6 +21,9 @@ export const DEFAULT_SETTINGS: Settings = {
 };
 
 export interface SavedGame {
+  /** Level id, for showing the name in the active language; empty in saves older than the field. */
+  id: string;
+  /** English level name. */
   name: string;
   /** Seconds played. */
   seconds: number;
@@ -60,7 +68,10 @@ export class Store {
 
   settings(): Settings {
     const stored = this.read(KEYS.settings);
-    return { ...DEFAULT_SETTINGS, ...(typeof stored === "object" ? stored : {}) };
+    const settings: Settings = { ...DEFAULT_SETTINGS, ...(typeof stored === "object" ? stored : {}) };
+    // Settings stored before the language choice existed, or with a language since removed.
+    if (!isLangSetting(settings.language)) settings.language = DEFAULT_SETTINGS.language;
+    return settings;
   }
 
   setSettings(settings: Settings): void {
@@ -88,7 +99,7 @@ export class Store {
   saved(): SavedGame | undefined {
     const stored = this.read(KEYS.save) as Partial<SavedGame> | undefined;
     return stored && typeof stored.data === "string" && typeof stored.name === "string"
-      ? { name: stored.name, seconds: stored.seconds ?? 0, when: stored.when ?? 0, data: stored.data }
+      ? { id: typeof stored.id === "string" ? stored.id : "", name: stored.name, seconds: stored.seconds ?? 0, when: stored.when ?? 0, data: stored.data }
       : undefined;
   }
 

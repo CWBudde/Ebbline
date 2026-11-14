@@ -17,17 +17,20 @@ import {
   type Kind,
   type LevelDef,
   type MapSize,
+  type PlaceError,
 } from "@ebbline/engine";
 import { Sound } from "./audio.ts";
 import { TILE, centreOn, clamp, type View } from "./camera.ts";
+import { placeErrorText, setLanguage, t } from "./i18n/index.ts";
 import { Input } from "./input.ts";
 import { drawStructure } from "./render/art.ts";
+import { spriteUrls } from "./render/assets.ts";
 import { Renderer } from "./render/world.ts";
 import { Runtime } from "./runtime.ts";
 import { Store, type Settings } from "./storage.ts";
 
 export type Screen = "title" | "campaign" | "skirmish" | "settings" | "help" | "game";
-export type Overlay = "none" | "menu" | "help" | "settings";
+export type Overlay = "none" | "menu" | "help" | "settings" | "briefing";
 
 const AUTOSAVE_MS = 30_000;
 const SIZES: readonly MapSize[] = ["small", "medium", "large"];
@@ -49,17 +52,39 @@ export class Controller {
   readonly store = new Store(localStorageOrNull());
   readonly settings = signal<Settings>(this.store.settings());
   readonly progress = signal<Record<string, number>>(this.store.progress());
-  readonly savedName = signal(this.store.saved()?.name ?? "");
+  /** The level of the stored game, if there is one. */
+  readonly savedLevel = signal<{ id: string; name: string } | undefined>(this.store.saved());
   /** Whether the last win beat the stored best time. */
   readonly newBest = signal(false);
   readonly icons = signal<Partial<Record<Kind, string>>>({});
   readonly view: View = { x: 0, y: 0, zoom: 1 };
   readonly sound = new Sound(this.settings.value);
+  /** Whether motion is reduced, by the setting or by the system preference. */
+  readonly still = signal(false);
+  private readonly motion = window.matchMedia("(prefers-reduced-motion: reduce)");
   private readonly app = new Application();
   private renderer: Renderer | undefined;
   private input: Input | undefined;
   private sinceSave = 0;
   private noticeTimer: ReturnType<typeof setTimeout> | undefined;
+
+  constructor() {
+    setLanguage(this.settings.value.language);
+    // With the setting on automatic, the game follows a change of the browser's languages.
+    window.addEventListener("languagechange", () => {
+      setLanguage(this.settings.value.language);
+    });
+    this.applyMotion();
+    this.motion.addEventListener("change", () => {
+      this.applyMotion();
+    });
+  }
+
+  /** The style sheet switches every animation and transition off under the root attribute. */
+  private applyMotion(): void {
+    this.still.value = this.settings.value.reducedMotion || this.motion.matches;
+    document.documentElement.toggleAttribute("data-reduced-motion", this.still.value);
+  }
 
   async init(stage: HTMLElement): Promise<void> {
     const app = this.app;
@@ -81,8 +106,9 @@ export class Controller {
         this.toggleMenu();
       },
       overlayOpen: () => this.overlay.value !== "none",
-      deny: () => {
+      deny: (why?: PlaceError) => {
         this.sound.deny();
+        if (why !== undefined) this.say(placeErrorText(why));
       },
       edgeScroll: () => this.settings.value.edgeScroll,
     });
@@ -101,19 +127,32 @@ export class Controller {
     this.openFromUrl();
   }
 
+  /** Build-bar icons: drawn in code at once, replaced by the atlas sprites when the art has loaded. */
   private makeIcons(): void {
-    const icons: Partial<Record<Kind, string>> = {};
+    const drawn: Partial<Record<Kind, string>> = {};
     try {
-      for (const kind of BUILDABLE) {
+      for (const kind of ["lander", ...BUILDABLE] as const) {
         const drawing = drawStructure(kind, 20);
         const canvas = this.app.renderer.extract.canvas({ target: drawing, resolution: 1 });
-        if (canvas.toDataURL) icons[kind] = canvas.toDataURL();
+        if (canvas.toDataURL) drawn[kind] = canvas.toDataURL();
         drawing.destroy();
       }
     } catch {
       // The build bar falls back to plain swatches.
     }
-    this.icons.value = icons;
+    const publish = (): void => {
+      // Sprites the art provides win; the drawn ones fill the gaps.
+      const all = { ...drawn, ...spriteUrls.value };
+      spriteUrls.value = all;
+      const icons: Partial<Record<Kind, string>> = {};
+      for (const kind of BUILDABLE) {
+        const url = all[kind];
+        if (url !== undefined) icons[kind] = url;
+      }
+      this.icons.value = icons;
+    };
+    publish();
+    void this.renderer?.ready.then(publish);
   }
 
   /** A link with ?seed=…&size=…&difficulty=… opens that skirmish directly. */
@@ -140,28 +179,31 @@ export class Controller {
     this.input?.frame(elapsedMs);
     const playing = rt.game.phase === "playing";
     // An open menu holds the game.
-    if (this.overlay.value === "none") rt.tick(elapsedMs);
+    const held = this.overlay.value !== "none";
+    if (!held) rt.tick(elapsedMs);
     if (playing && rt.game.phase !== "playing") this.finish(rt);
-    if (playing && !rt.paused.value) {
+    if (playing && !held && !rt.paused.value) {
       this.sinceSave += elapsedMs;
       if (this.sinceSave >= AUTOSAVE_MS) this.saveNow(false);
     }
-    this.renderer?.frame(rt, this.view, performance.now(), this.settings.value.reducedMotion);
+    this.renderer?.frame(rt, this.view, performance.now(), this.still.value, held);
   }
 
   private finish(rt: Runtime): void {
     this.store.clearSaved();
-    this.savedName.value = "";
+    this.savedLevel.value = undefined;
     if (rt.game.phase !== "won") return;
     this.newBest.value = this.store.recordWin(rt.game.level.id, seconds(rt.game));
     this.progress.value = this.store.progress();
   }
 
   private enter(game: Game): void {
+    // The menus are usable before the map renderer is; a click that early is dropped.
+    if (!this.renderer) return;
     const rt = new Runtime(game, (event: Event) => {
       this.sound.play(event);
     });
-    this.renderer?.load(game);
+    this.renderer.load(game);
     const lander = find(game, game.landerId);
     const screen = { w: this.app.screen.width, h: this.app.screen.height };
     // Show roughly thirty tiles across, less on a narrow screen.
@@ -175,7 +217,31 @@ export class Controller {
     this.screen.value = "game";
   }
 
+  /** Starts a level from the beginning. A campaign mission opens on its briefing, with the game held. */
   start(level: LevelDef): void {
+    this.begin(level);
+    this.openBriefing();
+  }
+
+  /** Whether the running level has a briefing: campaign missions do, skirmishes do not. */
+  hasBriefing(): boolean {
+    const id = this.runtime.value?.game.level.id;
+    return CAMPAIGN.some((l) => l.id === id);
+  }
+
+  /** Shows the briefing of the running mission; the game is held while it is open. */
+  openBriefing(): void {
+    if (this.hasBriefing() && this.runtime.value?.game.phase === "playing") this.overlay.value = "briefing";
+  }
+
+  /** Closes the briefing and lets the mission run. */
+  deploy(): void {
+    if (this.overlay.value !== "briefing") return;
+    this.sound.click();
+    this.overlay.value = "none";
+  }
+
+  private begin(level: LevelDef): void {
     this.enter(generate(level));
     const url = new URL(window.location.href);
     url.search = "";
@@ -193,10 +259,12 @@ export class Controller {
     if (!saved) return;
     try {
       this.enter(load(saved.data));
+      // A save from before the first tick was taken with the briefing still open.
+      if (this.runtime.value?.game.tick === 0) this.openBriefing();
     } catch {
       this.store.clearSaved();
-      this.savedName.value = "";
-      this.say("That save could not be read.");
+      this.savedLevel.value = undefined;
+      this.say(t("notice.unreadable"));
     }
   }
 
@@ -204,19 +272,22 @@ export class Controller {
     const rt = this.runtime.value;
     if (!rt || rt.game.phase !== "playing") return;
     this.sinceSave = 0;
+    const level = rt.game.level;
     const ok = this.store.setSaved({
-      name: rt.game.level.name,
+      id: level.id,
+      name: level.name,
       seconds: seconds(rt.game),
       when: Date.now(),
       data: save(rt.game),
     });
-    if (ok) this.savedName.value = rt.game.level.name;
-    if (announce) this.say(ok ? "Game saved." : "Saving is not available in this browser.");
+    if (ok) this.savedLevel.value = { id: level.id, name: level.name };
+    if (announce) this.say(t(ok ? "notice.saved" : "notice.noStorage"));
   }
 
   restart(): void {
     const rt = this.runtime.value;
-    if (rt) this.start(rt.game.level);
+    // No briefing: the player has just read it.
+    if (rt) this.begin(rt.game.level);
   }
 
   /** The campaign mission after the current one, if any. */
@@ -246,6 +317,8 @@ export class Controller {
   setSettings(settings: Settings): void {
     this.settings.value = settings;
     this.store.setSettings(settings);
+    setLanguage(settings.language);
+    this.applyMotion();
     this.sound.apply(settings);
   }
 

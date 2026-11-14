@@ -34,6 +34,29 @@ describe("store", () => {
     expect(store.settings()).toEqual(DEFAULT_SETTINGS);
   });
 
+  it("keeps the language setting, and reads settings stored without one as automatic", () => {
+    const backing = memory();
+    const store = new Store(backing);
+    backing.data.set("ebbline.settings", '{"volume":0.2,"music":false,"edgeScroll":true,"reducedMotion":false}');
+    expect(store.settings().language).toBe("auto");
+    store.setSettings({ ...store.settings(), language: "de" });
+    expect(new Store(backing).settings()).toEqual({
+      language: "de",
+      volume: 0.2,
+      music: false,
+      edgeScroll: true,
+      reducedMotion: false,
+    });
+    backing.data.set("ebbline.settings", '{"language":"tlh"}');
+    expect(store.settings().language).toBe("auto");
+  });
+
+  it("reads a save stored before level ids were kept", () => {
+    const backing = memory();
+    backing.data.set("ebbline.save", '{"name":"First Light","seconds":12,"when":5,"data":"{}"}');
+    expect(new Store(backing).saved()).toEqual({ id: "", name: "First Light", seconds: 12, when: 5, data: "{}" });
+  });
+
   it("keeps only the best time per level", () => {
     const store = new Store(memory());
     expect(store.recordWin("c1", 300)).toBe(true);
@@ -45,7 +68,7 @@ describe("store", () => {
   it("stores and clears one saved game", () => {
     const store = new Store(memory());
     expect(store.saved()).toBeUndefined();
-    const game = { name: "First Light", seconds: 12, when: 5, data: "{}" };
+    const game = { id: "c1", name: "First Light", seconds: 12, when: 5, data: "{}" };
     expect(store.setSaved(game)).toBe(true);
     expect(store.saved()).toEqual(game);
     store.clearSaved();
@@ -57,7 +80,7 @@ describe("store", () => {
       expect(store.settings()).toEqual(DEFAULT_SETTINGS);
       expect(store.progress()).toEqual({});
       expect(store.saved()).toBeUndefined();
-      expect(store.setSaved({ name: "x", seconds: 0, when: 0, data: "" })).toBe(false);
+      expect(store.setSaved({ id: "", name: "x", seconds: 0, when: 0, data: "" })).toBe(false);
       expect(store.recordWin("c1", 1)).toBe(true);
       store.clearSaved();
     }

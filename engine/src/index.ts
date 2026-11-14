@@ -9,7 +9,9 @@ export { pulseAmount, ventDry } from "./silt.ts";
 export { save, load, fingerprint, SAVE_SCHEMA } from "./save.ts";
 export {
   CAMPAIGN,
+  introduced,
   skirmish,
   type Difficulty,
+  type Introduced,
   type MapSize,
 } from "./levels.ts";

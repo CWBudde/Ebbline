@@ -18,6 +18,20 @@ pnpm run e2e     # Playwright against the production build
 - `engine/` holds the simulation: pure TypeScript, deterministic, no DOM and no Node.
 - `app/` is the browser front end: Vite, PixiJS for the map, Preact for the DOM UI.
 
+The interface is in English and German and follows the browser's language; the setting can pin
+either one. German text lives in `app/src/i18n/de.ts` and is typed against the English keys, so a
+missing translation fails the typecheck.
+
+## Art and fonts
+
+The images under `app/public/art/` (structure and feature sprites, ground materials, the title
+picture and the briefing illustrations) were generated for this project with an image model. The
+style guide and the prompt of every image are in `art/`. Each structure also has a code-drawn
+version in `app/src/render/art.ts`, which the game uses if an image fails to load.
+
+The fonts are Big Shoulders and IBM Plex Sans, both under the SIL Open Font License 1.1, bundled
+through the `@fontsource-variable` packages and served with the game.
+
 ## Origin
 
 This repository began as a fork of [OpenCreeper](https://github.com/alexanderzeillinger/OpenCreeper)
@@ -26,4 +40,4 @@ old code or assets remain. The old tree is kept under the git tag `legacy-dart`.
 
 ## License
 
-MIT, see `LICENSE`.
+The code and the art are under the MIT license, see `LICENSE`. The fonts keep their own license (OFL-1.1).

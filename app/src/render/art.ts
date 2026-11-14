@@ -1,4 +1,4 @@
-// Every structure is drawn in code, in one flat vector style, on a box of ±1 per tile half-width.
+// Code-drawn structures, the stand-in wherever the generated sprites are missing: one flat vector style, on a box of ±1 per tile half-width.
 
 import { Graphics } from "pixi.js";
 import type { Kind } from "@ebbline/engine";
