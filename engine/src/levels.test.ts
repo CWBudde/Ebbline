@@ -14,6 +14,12 @@ describe("introduced", () => {
       ["c6", { structures: ["baffle"], spitters: false, survive: true }],
       ["c7", { structures: ["grader"], ...none }],
       ["c8", { structures: [], ...none }],
+      ["c9", { structures: [], ...none }],
+      ["c10", { structures: [], ...none }],
+      ["c11", { structures: [], ...none }],
+      ["c12", { structures: [], ...none }],
+      ["c13", { structures: [], ...none }],
+      ["c14", { structures: [], ...none }],
     ]);
   });
 
