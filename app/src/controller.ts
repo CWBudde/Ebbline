@@ -20,6 +20,7 @@ import {
   type PlaceError,
 } from "@ebbline/engine";
 import { Sound } from "./audio.ts";
+import { siltTension } from "./audio/tension.ts";
 import { TILE, centreOn, clamp, type View } from "./camera.ts";
 import { placeErrorText, setLanguage, t } from "./i18n/index.ts";
 import { Input } from "./input.ts";
@@ -33,6 +34,8 @@ export type Screen = "title" | "campaign" | "skirmish" | "settings" | "help" | "
 export type Overlay = "none" | "menu" | "help" | "settings" | "briefing";
 
 const AUTOSAVE_MS = 30_000;
+/** How often the music reads how threatened the player is. */
+const TENSION_MS = 1000;
 const SIZES: readonly MapSize[] = ["small", "medium", "large"];
 const DIFFICULTIES: readonly Difficulty[] = ["easy", "normal", "hard"];
 
@@ -66,6 +69,8 @@ export class Controller {
   private renderer: Renderer | undefined;
   private input: Input | undefined;
   private sinceSave = 0;
+  /** Time since the music last read the silt, in milliseconds. */
+  private sinceTension = 0;
   private noticeTimer: ReturnType<typeof setTimeout> | undefined;
 
   constructor() {
@@ -182,6 +187,11 @@ export class Controller {
     const held = this.overlay.value !== "none";
     if (!held) rt.tick(elapsedMs);
     if (playing && rt.game.phase !== "playing") this.finish(rt);
+    this.sinceTension += elapsedMs;
+    if (this.sinceTension >= TENSION_MS) {
+      this.sinceTension = 0;
+      this.sound.setTension(siltTension(rt.game));
+    }
     if (playing && !held && !rt.paused.value) {
       this.sinceSave += elapsedMs;
       if (this.sinceSave >= AUTOSAVE_MS) this.saveNow(false);
@@ -300,6 +310,7 @@ export class Controller {
   quit(): void {
     this.saveNow(false);
     this.runtime.value = undefined;
+    this.sound.setTension(0, true);
     this.renderer?.load(undefined);
     this.overlay.value = "none";
     this.screen.value = "title";
