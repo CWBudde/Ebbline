@@ -11,7 +11,7 @@ describe("gridCoverage", () => {
     const covered = gridCoverage(game);
     for (let y = 0; y < game.h; y++) {
       for (let x = 0; x < game.w; x++) {
-        // A connector's own tile is covered, though nothing can link from where it stands.
+        // A structure's own tile is covered, though nothing can link from where it stands.
         if (game.structures.some((s) => s.x === x && s.y === y)) continue;
         expect(covered[y * game.w + x] === 1, `${String(x)},${String(y)}`).toBe(reaches(game, "lance", x, y));
       }

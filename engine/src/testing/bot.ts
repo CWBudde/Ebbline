@@ -49,12 +49,11 @@ function spot(
   return best;
 }
 
-/** Whether a structure placed here would link to a connector that is itself on the grid. */
+/** Whether a structure placed here would link to a structure that is itself on the grid. */
 function reaches(game: Game, kind: Kind, x: number, y: number): boolean {
   const probe = { kind, x, y } as Structure;
   return game.structures.some(
     (s) =>
-      KINDS[s.kind].connector &&
       Number.isFinite(s.dist) &&
       linkLength(probe, s) > 0,
   );
@@ -89,12 +88,10 @@ export function think(game: Game): Command[] {
   const count = (kind: Kind): number => all.filter((s) => s.kind === kind).length;
   const near = (kind: Kind, p: Point, r: number): number =>
     all.filter((s) => s.kind === kind && distance(s, p) <= r).length;
-  const connectors = all.filter(
-    (s) => KINDS[s.kind].connector && Number.isFinite(s.dist),
-  );
+  const onGrid = all.filter((s) => Number.isFinite(s.dist));
   const closest = (p: Point): Structure | undefined => {
     let best: Structure | undefined;
-    for (const c of connectors) {
+    for (const c of onGrid) {
       if (!best || distance(c, p) < distance(best, p)) best = c;
     }
     return best;

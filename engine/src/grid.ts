@@ -1,7 +1,6 @@
 // The power grid: which structures link, and the cheapest way from the lander to each.
 
 import {
-  KINDS,
   LINK_RANGE,
   TRUNK_RANGE,
   type Game,
@@ -15,25 +14,40 @@ export function isTrunkLink(a: Structure, b: Structure): boolean {
   return a.kind === "trunk" && b.kind === "trunk";
 }
 
-/** Length of the link between two structures, or 0 if they do not link. */
+/**
+ * Length of the link between two structures, or 0 if they do not link.
+ * Any two structures within LINK_RANGE link; two trunks link over TRUNK_RANGE.
+ */
 export function linkLength(a: Structure, b: Structure): number {
   const d = Math.hypot(a.x - b.x, a.y - b.y);
-  if (isTrunkLink(a, b)) return d <= TRUNK_RANGE ? d : 0;
-  if (!KINDS[a.kind].connector && !KINDS[b.kind].connector) return 0;
-  return d <= LINK_RANGE ? d : 0;
+  return d <= (isTrunkLink(a, b) ? TRUNK_RANGE : LINK_RANGE) ? d : 0;
 }
 
-/** Whether a structure placed here would link to a built or planned connector. */
-export function reaches(game: Game, kind: Structure["kind"], x: number, y: number): boolean {
+/**
+ * The structures a structure of this kind would link to if it stood at (x, y), in
+ * game.structures order. The placement preview draws exactly these links, and rebuild()
+ * creates exactly these links once the structure is placed, so the two cannot drift apart.
+ * `self` is left out, so the same call answers for a structure that is already placed.
+ */
+export function linksAt(
+  game: Game,
+  kind: Structure["kind"],
+  x: number,
+  y: number,
+  self = 0,
+): Structure[] {
   const probe = { kind, x, y } as Structure;
-  return game.structures.some(
-    (s) => KINDS[s.kind].connector && linkLength(probe, s) > 0,
-  );
+  return game.structures.filter((s) => s.id !== self && linkLength(probe, s) > 0);
+}
+
+/** Whether a structure placed here would link to any built or planned structure. */
+export function reaches(game: Game, kind: Structure["kind"], x: number, y: number): boolean {
+  return linksAt(game, kind, x, y).length > 0;
 }
 
 /**
  * Recomputes every structure's distance and parent toward the lander, and the link list.
- * Packets pass only through built connectors; anything may be the end of a route.
+ * Every built structure relays packets onward; an unfinished one can only be the end of a route.
  */
 export function rebuild(game: Game): void {
   const nodes = game.structures;
@@ -49,7 +63,7 @@ export function rebuild(game: Game): void {
     }
     if (!u || !Number.isFinite(u.dist)) break;
     open.delete(u);
-    if (!u.built || !KINDS[u.kind].connector) continue;
+    if (!u.built) continue;
     for (const v of open) {
       const length = linkLength(u, v);
       if (length === 0) continue;
@@ -60,19 +74,14 @@ export function rebuild(game: Game): void {
       }
     }
   }
+  // Every link linksAt() promises, built or not, not only the ones current routes run along.
   const links: number[] = [];
   for (let a = 0; a < nodes.length; a++) {
     const s = nodes[a];
     if (!s) continue;
-    if (!KINDS[s.kind].connector) {
-      if (s.parent !== 0) links.push(s.id, s.parent);
-      continue;
-    }
     for (let b = a + 1; b < nodes.length; b++) {
       const t = nodes[b];
-      if (t && KINDS[t.kind].connector && linkLength(s, t) > 0) {
-        links.push(s.id, t.id);
-      }
+      if (t && linkLength(s, t) > 0) links.push(s.id, t.id);
     }
   }
   game.links = links;

@@ -6,7 +6,7 @@ import {
   KINDS,
   LINK_RANGE,
   globAt,
-  linkLength,
+  linksAt,
   placeError,
   ventDry,
   type Game,
@@ -42,7 +42,7 @@ export class Renderer {
   private readonly lodes = new Container();
   private readonly features = new Graphics();
   private readonly vents = new Container();
-  /** The tiles the built grid reaches, shown while building and for a selected connector. */
+  /** The tiles the built grid reaches, shown while building and for a selected structure. */
   private readonly coverage = new Graphics();
   private coverageKey = "";
   private readonly under = new Graphics();
@@ -407,7 +407,7 @@ export class Renderer {
     const tool = rt.tool.value;
     const hover = rt.hover;
     this.coverage.visible =
-      tool.kind === "build" || (tool.kind === "none" && selected !== undefined && KINDS[selected.kind].connector);
+      tool.kind === "build" || (tool.kind === "none" && selected !== undefined);
     if (this.coverage.visible) this.drawCoverage(game);
     this.ghost.visible = false;
     if (hover && tool.kind === "build") {
@@ -415,12 +415,10 @@ export class Renderer {
       const error = placeError(game, tool.structure, hover.x, hover.y);
       const x = centre(hover.x);
       const y = centre(hover.y);
-      const probe = { kind: tool.structure, x: hover.x, y: hover.y } as Structure;
-      let linked = false;
-      for (const s of game.structures) {
-        if (!KINDS[s.kind].connector && !def.connector) continue;
-        if (linkLength(probe, s) === 0) continue;
-        if (KINDS[s.kind].connector) linked = true;
+      // The same links the engine creates once the structure is placed.
+      const links = linksAt(game, tool.structure, hover.x, hover.y);
+      const linked = links.length > 0;
+      for (const s of links) {
         over.moveTo(x, y).lineTo(centre(s.x), centre(s.y)).stroke({ width: 2, color: COLORS.grid, alpha: 0.5 });
       }
       const ok = error === null && linked;
@@ -432,7 +430,7 @@ export class Renderer {
         color: ok ? COLORS.utility : error === null ? COLORS.economy : COLORS.bad,
       });
       if (def.range > 0) this.range(over, x, y, def.range, def.minRange, ACCENT[tool.structure]);
-      else if (def.connector) this.range(over, x, y, LINK_RANGE, 0, COLORS.grid);
+      else this.range(over, x, y, LINK_RANGE, 0, COLORS.grid);
     } else if (hover && tool.kind === "grade") {
       over.rect(hover.x * TILE, hover.y * TILE, TILE, TILE).stroke({ width: 2, color: COLORS.utility });
     }
