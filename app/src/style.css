@@ -359,6 +359,16 @@ kbd {
   opacity: 1;
 }
 
+/* The living picture over the plain one; it shows once it has drawn its first frame. */
+.title .scene {
+  opacity: 0;
+  transition: opacity 0.4s ease-out;
+}
+
+.title .scene.live {
+  opacity: 1;
+}
+
 .title-inner {
   position: relative;
   height: 100%;

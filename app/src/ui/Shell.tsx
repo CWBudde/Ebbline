@@ -1,10 +1,11 @@
 // Screens outside a running game: title, campaign, skirmish, settings and help.
 
-import { useState } from "preact/hooks";
+import { useEffect, useRef, useState } from "preact/hooks";
 import type { ComponentChildren } from "preact";
 import { BUILDABLE, CAMPAIGN, KINDS, skirmish, type Difficulty, type MapSize } from "@ebbline/engine";
 import type { Controller, Screen } from "../controller.ts";
 import { TITLE_ART_URL, illustrationUrl } from "../render/assets.ts";
+import { startTitleScene } from "../render/titleScene.ts";
 import {
   LANGUAGES,
   clock,
@@ -120,9 +121,17 @@ export function Title({ c }: { c: Controller }) {
     c.screen.value = screen;
   };
   const saved = c.savedLevel.value;
+  const still = c.still.value;
+  const scene = useRef<HTMLCanvasElement>(null);
+  const [live, setLive] = useState(false);
+  useEffect(() => {
+    if (!scene.current) return undefined;
+    return startTitleScene(scene.current, TITLE_ART_URL, { still, onReady: () => { setLive(true); } });
+  }, [still]);
   return (
     <div class="screen title">
       <img class="backdrop" src={TITLE_ART_URL} alt="" />
+      <canvas ref={scene} class={live ? "backdrop scene live" : "backdrop scene"} aria-hidden="true" />
       <div class="title-inner">
         <header class="title-head">
           <h1 class="wordmark">Ebbline</h1>
