@@ -302,6 +302,36 @@ export const deContent: Content = {
       brief: "Vier Schlote, zwei Speier, alles, was du hast. Wende das Blatt.",
       hints: [],
     },
+    c9: {
+      name: "Kreuzfeuer",
+      brief: "Drei Speier umkreisen ein kleines Becken. Verteil dich, damit dich kein einzelner Klumpen bricht.",
+      hints: ["Klumpen zielen auf deine dichteste Gebäudegruppe, ein weit verzweigtes Netz verteilt also den Schaden."],
+    },
+    c10: {
+      name: "Dürreland",
+      brief: "Wenige Adern und drei hungrige Schlote. Jedes Paket zählt.",
+      hints: ["Wenn die Adern ausgehen, bezahlen Pumpen an der Front den Vorstoß."],
+    },
+    c11: {
+      name: "Hagelsturm",
+      brief: "Zwei Speier feuern schnell und oft. Sichere dein Netz ab, bevor du vorrückst.",
+      hints: [],
+    },
+    c12: {
+      name: "Sog",
+      brief: "Vier Schlote, ein Speier und keine Anhöhe. Halt fünfzehn Minuten durch.",
+      hints: ["Such die Täler, die zum Lander führen, und sperr jedes mit einer Sperre ab."],
+    },
+    c13: {
+      name: "Delta",
+      brief: "Vier Schlote, verstreut über ein weites Delta. Trassen und Speicher versorgen eine lange Front.",
+      hints: [],
+    },
+    c14: {
+      name: "Springflut",
+      brief: "Die höchste Flut bisher: vier Schlote und drei Speier. Bring zu Ende, was du begonnen hast.",
+      hints: [],
+    },
   },
   skirmish: { name: "Gefecht {seed}", brief: "Verschließ jeden Schlot." },
 };
