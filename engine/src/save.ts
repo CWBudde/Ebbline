@@ -2,7 +2,10 @@
 
 import { type Game } from "./state.ts";
 
-export const SAVE_SCHEMA = 1;
+/** 2: every built structure relays packets, so the derived grid of a schema 1 save is stale. */
+export const SAVE_SCHEMA = 2;
+/** Older schemas that load can still read; their derived grid state is rebuilt on the next step. */
+const STALE_GRID_SCHEMAS: readonly number[] = [1];
 
 type Packed = { [K in keyof Game]: Game[K] extends ArrayBufferView ? string : Game[K] };
 
@@ -45,7 +48,8 @@ export function save(game: Game): string {
 
 export function load(text: string): Game {
   const data = JSON.parse(text) as { schema?: number; game?: Packed };
-  if (data.schema !== SAVE_SCHEMA || !data.game) {
+  const stale = data.schema !== undefined && STALE_GRID_SCHEMAS.includes(data.schema);
+  if ((data.schema !== SAVE_SCHEMA && !stale) || !data.game) {
     throw new Error(`unsupported save schema ${String(data.schema)}`);
   }
   const packed = data.game;
@@ -62,6 +66,8 @@ export function load(text: string): Game {
   for (const s of game.structures) {
     if (s.dist < 0) s.dist = Infinity;
   }
+  // The routing rules changed since this save; recompute links, distances and parents.
+  if (stale) game.gridDirty = true;
   return game;
 }
 

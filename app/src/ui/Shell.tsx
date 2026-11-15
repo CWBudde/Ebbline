@@ -115,6 +115,20 @@ export function Page(props: {
   );
 }
 
+/**
+ * The moving title backdrop over the still art. It runs once per mount, so a change of motion
+ * mode remounts it (see the `key` in `Title`) with a fresh canvas and WebGL context.
+ */
+function TitleScene({ still }: { still: boolean }) {
+  const scene = useRef<HTMLCanvasElement>(null);
+  const [live, setLive] = useState(false);
+  useEffect(() => {
+    if (!scene.current) return undefined;
+    return startTitleScene(scene.current, TITLE_ART_URL, { still, onReady: () => { setLive(true); } });
+  }, [still]);
+  return <canvas ref={scene} class={live ? "backdrop scene live" : "backdrop scene"} aria-hidden="true" />;
+}
+
 export function Title({ c }: { c: Controller }) {
   const go = (screen: Screen) => (): void => {
     c.sound.click();
@@ -122,16 +136,10 @@ export function Title({ c }: { c: Controller }) {
   };
   const saved = c.savedLevel.value;
   const still = c.still.value;
-  const scene = useRef<HTMLCanvasElement>(null);
-  const [live, setLive] = useState(false);
-  useEffect(() => {
-    if (!scene.current) return undefined;
-    return startTitleScene(scene.current, TITLE_ART_URL, { still, onReady: () => { setLive(true); } });
-  }, [still]);
   return (
     <div class="screen title">
       <img class="backdrop" src={TITLE_ART_URL} alt="" />
-      <canvas ref={scene} class={live ? "backdrop scene live" : "backdrop scene"} aria-hidden="true" />
+      <TitleScene key={still ? "still" : "moving"} still={still} />
       <div class="title-inner">
         <header class="title-head">
           <h1 class="wordmark">Ebbline</h1>

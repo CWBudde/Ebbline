@@ -1,10 +1,10 @@
 // The shared signal chain and a small voice toolkit. Every voice cleans up after itself: its
 // source stops on a schedule and `onended` disconnects all of its nodes.
 //
-//   sfx bus ───┐
-//   music bus ─┼──► compressor ──► master (volume) ──► destination
-//   reverb ◄── sends ──┤
-//   echo   ◄── sends ──┘
+//   sfx voices ──► sfx bus ─────────────┐
+//     └ sends ──► reverb, echo ─────────┤
+//   music voices ──► music fader ───────┼──► compressor ──► master (volume) ──► destination
+//     └ sends ──► music reverb, echo ──┘ (return through the music fader)
 
 export type Rand = () => number;
 
@@ -15,11 +15,16 @@ export interface Graph {
   /** Everything feeds this; it keeps stacked events from clipping. */
   readonly mix: AudioNode;
   readonly sfx: GainNode;
+  /** The music fader: music voices and the music's own effect returns all pass through it. */
   readonly music: GainNode;
   /** Input of the shared reverb. */
   readonly reverb: GainNode;
   /** Input of the shared tempo-free echo. */
   readonly echo: GainNode;
+  /** Reverb input for music voices; it returns through the music fader. */
+  readonly musicReverb: GainNode;
+  /** Echo input for music voices; it returns through the music fader. */
+  readonly musicEcho: GainNode;
   /** One second of white noise, reused by every noise burst. */
   readonly noise: AudioBuffer;
   /** Voices sounding now; new optional sounds are skipped when there are too many. */
@@ -44,12 +49,26 @@ export function createGraph(context: AudioContext): Graph {
   music.gain.value = 0;
   music.connect(limiter);
 
+  const space = impulse(context, 2.6);
+  const { reverb, echo } = effects(context, space, limiter);
+  // The music has its own returns into the music fader, so muting or ducking it also takes its tails.
+  const { reverb: musicReverb, echo: musicEcho } = effects(context, space, music);
+
+  const noise = context.createBuffer(1, context.sampleRate, context.sampleRate);
+  const data = noise.getChannelData(0);
+  for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
+
+  return { context, master, mix: limiter, sfx, music, reverb, echo, musicReverb, musicEcho, noise, active: 0 };
+}
+
+/** A reverb and an echo returning into `out`; the echo's repeats also feed the reverb. */
+function effects(context: AudioContext, space: AudioBuffer, out: AudioNode): { reverb: GainNode; echo: GainNode } {
   const reverb = context.createGain();
   const convolver = context.createConvolver();
-  convolver.buffer = impulse(context, 2.6);
+  convolver.buffer = space;
   const wet = context.createGain();
   wet.gain.value = 0.55;
-  reverb.connect(convolver).connect(wet).connect(limiter);
+  reverb.connect(convolver).connect(wet).connect(out);
 
   // A dark echo: each repeat is filtered a little more.
   const echo = context.createGain();
@@ -63,14 +82,9 @@ export function createGraph(context: AudioContext): Graph {
   echo.connect(delay).connect(tone).connect(feedback).connect(delay);
   const echoOut = context.createGain();
   echoOut.gain.value = 0.5;
-  tone.connect(echoOut).connect(limiter);
+  tone.connect(echoOut).connect(out);
   tone.connect(reverb);
-
-  const noise = context.createBuffer(1, context.sampleRate, context.sampleRate);
-  const data = noise.getChannelData(0);
-  for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
-
-  return { context, master, mix: limiter, sfx, music, reverb, echo, noise, active: 0 };
+  return { reverb, echo };
 }
 
 /** A stereo impulse response: decaying noise that darkens as it fades, like a large cave. */
@@ -182,9 +196,10 @@ function chain(
     out = panner;
   }
   out.connect(options.bus ?? graph.sfx);
+  const music = options.bus === graph.music;
   for (const [level, target] of [
-    [options.reverb, graph.reverb],
-    [options.echo, graph.echo],
+    [options.reverb, music ? graph.musicReverb : graph.reverb],
+    [options.echo, music ? graph.musicEcho : graph.echo],
   ] as const) {
     if (!level) continue;
     const send = context.createGain();

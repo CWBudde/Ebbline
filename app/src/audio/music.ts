@@ -48,7 +48,7 @@ export class Score {
     this.padBus.connect(graph.music);
     const send = context.createGain();
     send.gain.value = 0.6;
-    this.padBus.connect(send).connect(graph.reverb);
+    this.padBus.connect(send).connect(graph.musicReverb);
   }
 
   /** Turns the music on or off with a slow fade. */
