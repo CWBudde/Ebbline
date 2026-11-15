@@ -1,4 +1,5 @@
-// English interface text, and the source of the keys: `de.ts` must define exactly these.
+// English interface text, and the source of the keys: every other language file must define
+// exactly these.
 //
 // Placeholders are named, as in "Best {time}". In the help text, *word* is set bold and _word_ in
 // the silt colour.
@@ -50,7 +51,7 @@ export const en = {
     "Silt wells up from _vents_ and flows downhill. It wears down anything it stands on. Lose the lander and the mission is lost. Win by building a *Cap* on every vent.",
   "help.grid.title": "The grid",
   "help.grid.text":
-    "Energy leaves the lander as packets and travels along grid links. Pylons and Trunks carry packets on; everything else must stand within six tiles of one of them. While you build, or with a Pylon selected, the area the finished grid reaches is tinted. A red dot marks a structure the grid does not reach.",
+    "Energy leaves the lander as packets and travels along grid links. Every structure passes packets on, and each must stand within six tiles of a built one; Pylons are the cheap way to reach further. While you build, or with a Pylon selected, the area the finished grid reaches is tinted. A red dot marks a structure the grid does not reach.",
   "help.cap.title": "Capping a vent",
   "help.cap.text":
     "A Cap can only be started when the vent tile is nearly dry, shown by a white ring. While it is being built it holds the vent shut, but the pressure builds up: if the Cap is lost, all of it bursts out at once.",
@@ -97,7 +98,7 @@ export const en = {
   "key.slot11": "−",
   "key.delete": "Del",
 
-  "status.offGrid": "Off the grid: needs a Pylon or Trunk within six tiles",
+  "status.offGrid": "Off the grid: needs a structure within six tiles",
   "status.building": "Under construction",
   "status.off": "Switched off",
   "status.damaged": "Damaged, repairing",

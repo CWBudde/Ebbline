@@ -4,27 +4,25 @@ import { rebuild } from "./grid.ts";
 import { build, flat, lander, run } from "./testing/fixtures.ts";
 
 describe("grid", () => {
-  it("links structures within six tiles of a connector", () => {
+  it("links structures within six tiles of each other", () => {
     const game = flat(40);
     const l = lander(game);
     const near = build(game, "lance", l.x + 6, l.y);
-    const far = build(game, "lance", l.x + 7, l.y);
+    const far = build(game, "lance", l.x + 13, l.y);
     rebuild(game);
     expect(near.dist).toBe(6);
     expect(near.parent).toBe(l.id);
     expect(far.dist).toBe(Infinity);
   });
 
-  it("does not route through structures that are not connectors", () => {
+  it("routes through any built structure, not only pylons", () => {
     const game = flat(40);
     const l = lander(game);
-    build(game, "lance", l.x + 5, l.y);
+    const relay = build(game, "lance", l.x + 5, l.y);
     const beyond = build(game, "lance", l.x + 10, l.y);
     rebuild(game);
-    expect(beyond.dist).toBe(Infinity);
-    const pylon = build(game, "pylon", l.x + 6, l.y);
-    rebuild(game);
-    expect(beyond.parent).toBe(pylon.id);
+    expect(beyond.parent).toBe(relay.id);
+    expect(beyond.dist).toBe(10);
   });
 
   it("does not route through an unfinished pylon", () => {

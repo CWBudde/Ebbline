@@ -1,8 +1,12 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { BUILDABLE, CAMPAIGN, KINDS, skirmish, type Kind, type PlaceError } from "@ebbline/engine";
-import { de, deContent } from "./de.ts";
-import { en, type Key } from "./en.ts";
+import { deContent } from "./de.ts";
+import { en, type Content, type Key } from "./en.ts";
 import {
+  CONTENT,
+  LANGUAGES,
+  TEXT,
+  type Lang,
   clock,
   detect,
   fill,
@@ -39,66 +43,99 @@ afterEach(() => {
   lang.value = "en";
 });
 
+/** Every language besides English, which is the source. */
+const OTHERS = LANGUAGES.map((l) => l.id).filter((id): id is Exclude<Lang, "en"> => id !== "en");
+
+function contentOf(id: Lang): Content {
+  const content = CONTENT[id];
+  if (!content) throw new Error(`no content for ${id}`);
+  return content;
+}
+
 describe("dictionaries", () => {
-  it("has the same keys in German as in English, none of them empty", () => {
-    expect(Object.keys(de).sort()).toEqual([...KEYS].sort());
-    for (const key of KEYS) expect(de[key].trim(), key).not.toBe("");
+  it("covers every language that the setting offers", () => {
+    expect(Object.keys(TEXT).sort()).toEqual(LANGUAGES.map((l) => l.id).sort());
+    expect(Object.keys(CONTENT).sort()).toEqual([...OTHERS].sort());
+    expect(new Set(LANGUAGES.map((l) => l.name)).size).toBe(LANGUAGES.length);
   });
 
-  it("uses the same placeholders and marks in German as in English", () => {
-    for (const key of KEYS) {
-      expect(placeholders(de[key]), key).toEqual(placeholders(en[key]));
-      for (const mark of [/\*[^*]+\*/g, /_[^_]+_/g]) {
-        expect(de[key].match(mark)?.length ?? 0, key).toBe(en[key].match(mark)?.length ?? 0);
+  describe.each(OTHERS)("%s", (id) => {
+    const text = TEXT[id];
+    const content = contentOf(id);
+
+    it("has the same keys as English, none of them empty", () => {
+      expect(Object.keys(text).sort()).toEqual([...KEYS].sort());
+      for (const key of KEYS) expect(text[key].trim(), key).not.toBe("");
+    });
+
+    it("uses the same placeholders and marks as English", () => {
+      for (const key of KEYS) {
+        expect(placeholders(text[key]), key).toEqual(placeholders(en[key]));
+        for (const mark of [/\*[^*]+\*/g, /_[^_]+_/g]) {
+          expect(text[key].match(mark)?.length ?? 0, key).toBe(en[key].match(mark)?.length ?? 0);
+        }
       }
-    }
-    expect(placeholders(deContent.skirmish.name)).toEqual(["seed"]);
-  });
+      expect(placeholders(content.skirmish.name)).toEqual(["seed"]);
+      expect(placeholders(content.skirmish.brief)).toEqual([]);
+    });
 
-  it("has German text for every campaign level and each of its hints", () => {
-    expect(Object.keys(deContent.levels).sort()).toEqual(CAMPAIGN.map((l) => l.id).sort());
-    for (const level of CAMPAIGN) {
-      const text = deContent.levels[level.id];
-      expect(text?.name.trim(), level.id).toBeTruthy();
-      expect(text?.brief.trim(), level.id).toBeTruthy();
-      expect(text?.brief, level.id).not.toBe(level.brief);
-      expect(text?.hints.length, level.id).toBe(level.hints.length);
-      level.hints.forEach((hint, i) => {
-        expect(text?.hints[i]?.trim(), `${level.id} hint ${i}`).toBeTruthy();
-        expect(text?.hints[i], `${level.id} hint ${i}`).not.toBe(hint);
-      });
-    }
-  });
+    it("has text for every campaign level and each of its hints", () => {
+      expect(Object.keys(content.levels).sort()).toEqual(CAMPAIGN.map((l) => l.id).sort());
+      for (const level of CAMPAIGN) {
+        const lt = content.levels[level.id];
+        expect(lt?.name.trim(), level.id).toBeTruthy();
+        expect(lt?.brief.trim(), level.id).toBeTruthy();
+        expect(lt?.brief, level.id).not.toBe(level.brief);
+        expect(lt?.hints.length, level.id).toBe(level.hints.length);
+        level.hints.forEach((hint, i) => {
+          expect(lt?.hints[i]?.trim(), `${level.id} hint ${i}`).toBeTruthy();
+          expect(lt?.hints[i], `${level.id} hint ${i}`).not.toBe(hint);
+        });
+      }
+    });
 
-  it("has a German name and description for every structure kind", () => {
-    const kinds = Object.keys(KINDS) as Kind[];
-    expect(Object.keys(deContent.kinds).sort()).toEqual([...kinds].sort());
-    for (const kind of kinds) {
-      expect(deContent.kinds[kind].name.trim(), kind).not.toBe("");
-      expect(deContent.kinds[kind].blurb.trim(), kind).not.toBe("");
-      expect(deContent.kinds[kind].blurb, kind).not.toBe(KINDS[kind].blurb);
-    }
-    expect(BUILDABLE.every((kind) => kind in deContent.kinds)).toBe(true);
-  });
+    it("has a name and description for every structure kind", () => {
+      const kinds = Object.keys(KINDS) as Kind[];
+      expect(Object.keys(content.kinds).sort()).toEqual([...kinds].sort());
+      for (const kind of kinds) {
+        expect(content.kinds[kind].name.trim(), kind).not.toBe("");
+        expect(content.kinds[kind].blurb.trim(), kind).not.toBe("");
+        expect(content.kinds[kind].blurb, kind).not.toBe(KINDS[kind].blurb);
+      }
+      expect(BUILDABLE.every((kind) => kind in content.kinds)).toBe(true);
+    });
 
-  it("has English and German text for every placement error", () => {
-    for (const code of Object.keys(PLACE_ERRORS) as PlaceError[]) {
-      const english = placeErrorText(code);
-      lang.value = "de";
-      const german = placeErrorText(code);
-      lang.value = "en";
-      expect(english.trim(), code).not.toBe("");
-      expect(german.trim(), code).not.toBe("");
-      expect(german, code).not.toBe(english);
-    }
+    it("has its own text for every placement error", () => {
+      for (const code of Object.keys(PLACE_ERRORS) as PlaceError[]) {
+        const english = placeErrorText(code);
+        lang.value = id;
+        const translated = placeErrorText(code);
+        lang.value = "en";
+        expect(english.trim(), code).not.toBe("");
+        expect(translated.trim(), code).not.toBe("");
+        expect(translated, code).not.toBe(english);
+      }
+    });
+
+    it("formats numbers with Latin digits and times as minutes:seconds", () => {
+      lang.value = id;
+      expect(num(12345).replace(/\D/g, "")).toBe("12345");
+      expect(num(0.5, 1)).toMatch(/^0[.,]5$/);
+      expect(clock(247)).toBe("4:07");
+      expect(clock(3600)).toBe("60:00");
+    });
   });
 });
 
 describe("language", () => {
-  it("takes the first German or English entry the browser lists, else English", () => {
+  it("takes the first supported language the browser lists, else English", () => {
     expect(detect("auto", ["de-AT", "en"])).toBe("de");
-    expect(detect("auto", ["fr", "en-GB"])).toBe("en");
-    expect(detect("auto", ["fr"])).toBe("en");
+    expect(detect("auto", ["sv", "en-GB"])).toBe("en");
+    expect(detect("auto", ["sv"])).toBe("en");
+    expect(detect("auto", ["fr-CA", "en"])).toBe("fr");
+    expect(detect("auto", ["pt-BR"])).toBe("pt");
+    expect(detect("auto", ["zh-CN", "en"])).toBe("zh");
+    expect(detect("auto", ["ko", "ja-JP"])).toBe("ja");
     expect(detect("auto", [])).toBe("en");
     expect(detect("auto", ["DE"])).toBe("de");
     // "den" is not German: only the primary subtag counts.
@@ -135,6 +172,13 @@ describe("language", () => {
     expect(num(0.5, 1)).toBe("0,5");
     expect(num(12345)).toBe("12.345");
     expect(clock(247)).toBe("4:07");
+    lang.value = "fr";
+    expect(num(12345)).toBe("12\u202f345");
+    expect(num(0.5, 1)).toBe("0,5");
+    lang.value = "ru";
+    expect(num(12345)).toBe("12\u00a0345");
+    lang.value = "ja";
+    expect(num(12345)).toBe("12,345");
   });
 });
 

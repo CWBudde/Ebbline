@@ -18,9 +18,11 @@ pnpm run e2e     # Playwright against the production build
 - `engine/` holds the simulation: pure TypeScript, deterministic, no DOM and no Node.
 - `app/` is the browser front end: Vite, PixiJS for the map, Preact for the DOM UI.
 
-The interface is in English and German and follows the browser's language; the setting can pin
-either one. German text lives in `app/src/i18n/de.ts` and is typed against the English keys, so a
-missing translation fails the typecheck.
+The interface is in English, German, French, Spanish, Italian, Portuguese, Dutch, Polish, Russian,
+Simplified Chinese and Japanese, and follows the browser's language; the setting can pin any of
+them. Each language has one file in `app/src/i18n/` (`de.ts`, `fr.ts`, and so on) that is typed
+against the English keys, so a missing translation fails the typecheck, and the unit tests check
+that level text, placeholders and markup are complete.
 
 ## Art and fonts
 

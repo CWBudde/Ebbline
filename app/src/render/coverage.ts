@@ -1,21 +1,21 @@
 // The tiles the finished power grid reaches: where a structure can stand and be supplied now.
 
-import { KINDS, LINK_RANGE, type Game } from "@ebbline/engine";
+import { LINK_RANGE, type Game } from "@ebbline/engine";
 
-/** A key that changes whenever the connectors of the grid do. */
+/** A key that changes whenever the built structures of the grid do. */
 export function coverageKey(game: Game): string {
   let key = "";
   for (const s of game.structures) {
-    if (s.built && KINDS[s.kind].connector) key += `${String(s.id)}:${String(s.x)},${String(s.y)};`;
+    if (s.built) key += `${String(s.id)}:${String(s.x)},${String(s.y)};`;
   }
   return key;
 }
 
-/** One byte per tile: 1 where a built lander, Pylon or Trunk is within link range. */
+/** One byte per tile: 1 where a built structure is within link range. */
 export function gridCoverage(game: Game): Uint8Array {
   const covered = new Uint8Array(game.w * game.h);
   for (const s of game.structures) {
-    if (!s.built || !KINDS[s.kind].connector) continue;
+    if (!s.built) continue;
     for (let dy = -LINK_RANGE; dy <= LINK_RANGE; dy++) {
       const y = s.y + dy;
       if (y < 0 || y >= game.h) continue;

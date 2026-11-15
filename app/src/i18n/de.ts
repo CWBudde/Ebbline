@@ -67,7 +67,7 @@ export const de: Record<Key, string> = {
     "Schlick quillt aus _Schloten_ und fließt bergab. Er zersetzt alles, worauf er steht. Geht der Lander verloren, ist die Mission verloren. Du gewinnst, indem du auf jeden Schlot eine *Kappe* baust.",
   "help.grid.title": "Das Netz",
   "help.grid.text":
-    "Energie verlässt den Lander in Paketen und wandert über die Leitungen des Netzes. Pylonen und Trassen leiten Pakete weiter; alles andere muss höchstens sechs Felder von einem von ihnen entfernt stehen. Beim Bauen, oder wenn ein Pylon ausgewählt ist, ist der Bereich eingefärbt, den das fertige Netz erreicht. Ein roter Punkt markiert ein Gebäude, das das Netz nicht erreicht.",
+    "Energie verlässt den Lander in Paketen und wandert über die Leitungen des Netzes. Jedes Gebäude leitet Pakete weiter und muss höchstens sechs Felder von einem fertigen Gebäude entfernt stehen; Pylonen sind der günstige Weg, weiter zu reichen. Beim Bauen, oder wenn ein Pylon ausgewählt ist, ist der Bereich eingefärbt, den das fertige Netz erreicht. Ein roter Punkt markiert ein Gebäude, das das Netz nicht erreicht.",
   "help.cap.title": "Einen Schlot verschließen",
   "help.cap.text":
     "Eine Kappe lässt sich erst beginnen, wenn das Feld des Schlots fast trocken ist; das zeigt ein weißer Ring. Im Bau hält sie den Schlot zu, doch der Druck steigt: Geht die Kappe verloren, bricht alles auf einmal hervor.",
@@ -114,7 +114,7 @@ export const de: Record<Key, string> = {
   "key.slot11": "ß",
   "key.delete": "Entf",
 
-  "status.offGrid": "Nicht am Netz: braucht einen Pylon oder eine Trasse im Umkreis von sechs Feldern",
+  "status.offGrid": "Nicht am Netz: braucht ein Gebäude im Umkreis von sechs Feldern",
   "status.building": "Im Bau",
   "status.off": "Abgeschaltet",
   "status.damaged": "Beschädigt, wird repariert",
@@ -260,7 +260,7 @@ export const deContent: Content = {
       brief: "Ein einzelner, träger Schlot. Zapf die Adern an, führ das Netz bergab und verschließ ihn.",
       hints: [
         "Setz Zapfer auf die leuchtenden Adern beim Lander, um Energie zu gewinnen.",
-        "Pylonen erweitern das Netz. Alles muss höchstens sechs Felder von einem Pylon entfernt stehen.",
+        "Pylonen erweitern das Netz am günstigsten. Alles muss höchstens sechs Felder von einem fertigen Gebäude entfernt stehen.",
         "Lanzen brennen Schlick weg. Stell sie auf Anhöhen: Bergauf können sie nicht zielen.",
         "Läuft der Schlot zwischen zwei Schüben trocken, setz eine Kappe darauf und halt sie versorgt.",
       ],
@@ -292,14 +292,14 @@ export const deContent: Content = {
     },
     c7: {
       name: "Erdarbeiten",
-      brief: "Drei Schlote und zerklüftetes Gelände. Planierer schütten Deiche auf und graben Rampen.",
+      brief: "Fünf Schlote und zerklüftetes Gelände. Planierer schütten Deiche auf und graben Rampen.",
       hints: [
         "Wähl „Markieren“, such eine Höhe aus und markier die Felder; ein Planierer in Reichweite erledigt die Arbeit.",
       ],
     },
     c8: {
       name: "Ebbline",
-      brief: "Vier Schlote, zwei Speier, alles, was du hast. Wende das Blatt.",
+      brief: "Sechs Schlote, zwei Speier, alles, was du hast. Wende das Blatt.",
       hints: [],
     },
     c9: {
@@ -324,7 +324,7 @@ export const deContent: Content = {
     },
     c13: {
       name: "Delta",
-      brief: "Vier Schlote, verstreut über ein weites Delta. Trassen und Speicher versorgen eine lange Front.",
+      brief: "Fünf Schlote, verstreut über ein weites Delta. Trassen und Speicher versorgen eine lange Front.",
       hints: [],
     },
     c14: {

@@ -7,21 +7,52 @@ import { signal } from "@preact/signals";
 import { KINDS, type Kind, type PlaceError } from "@ebbline/engine";
 import { de, deContent } from "./de.ts";
 import { en, type Content, type Key } from "./en.ts";
+import { es, esContent } from "./es.ts";
+import { fr, frContent } from "./fr.ts";
+import { it, itContent } from "./it.ts";
+import { ja, jaContent } from "./ja.ts";
+import { nl, nlContent } from "./nl.ts";
+import { pl, plContent } from "./pl.ts";
+import { pt, ptContent } from "./pt.ts";
+import { ru, ruContent } from "./ru.ts";
+import { zh, zhContent } from "./zh.ts";
 
 export type { Content, Key, LevelText } from "./en.ts";
 
-export type Lang = "en" | "de";
+export type Lang = "en" | "de" | "fr" | "es" | "it" | "pt" | "nl" | "pl" | "ru" | "zh" | "ja";
 export type LangSetting = "auto" | Lang;
 
 /** The choices of the language setting, with each language named in itself. */
 export const LANGUAGES: readonly { readonly id: Lang; readonly name: string }[] = [
   { id: "en", name: "English" },
   { id: "de", name: "Deutsch" },
+  { id: "fr", name: "Français" },
+  { id: "es", name: "Español" },
+  { id: "it", name: "Italiano" },
+  { id: "pt", name: "Português" },
+  { id: "nl", name: "Nederlands" },
+  { id: "pl", name: "Polski" },
+  { id: "ru", name: "Русский" },
+  { id: "zh", name: "简体中文" },
+  { id: "ja", name: "日本語" },
 ];
 
-const TEXT: Readonly<Record<Lang, Readonly<Record<Key, string>>>> = { en, de };
+export const TEXT: Readonly<Record<Lang, Readonly<Record<Key, string>>>> = {
+  en, de, fr, es, it, pt, nl, pl, ru, zh, ja,
+};
 /** English content is the engine's own text. */
-const CONTENT: Readonly<Partial<Record<Lang, Content>>> = { de: deContent };
+export const CONTENT: Readonly<Partial<Record<Lang, Content>>> = {
+  de: deContent,
+  fr: frContent,
+  es: esContent,
+  it: itContent,
+  pt: ptContent,
+  nl: nlContent,
+  pl: plContent,
+  ru: ruContent,
+  zh: zhContent,
+  ja: jaContent,
+};
 
 /** The active language. Set it through `setLanguage`. */
 export const lang = signal<Lang>("en");

@@ -34,6 +34,15 @@ describe("saves", () => {
     expect(fingerprint(copy)).toBe(fingerprint(game));
   });
 
+  it("rebuild the grid of saves taken under the old routing rules", () => {
+    const game = generate(level);
+    advance(game, 900);
+    expect(game.gridDirty).toBe(false);
+    const old = JSON.parse(save(game)) as { schema: number };
+    old.schema = 1;
+    expect(load(JSON.stringify(old)).gridDirty).toBe(true);
+  });
+
   it("reject other schemas", () => {
     expect(() => load('{"schema":99}')).toThrow("unsupported save schema 99");
   });
